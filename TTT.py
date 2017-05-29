@@ -19,16 +19,16 @@ class Board:
 
     def mark(self, square, player):
         if self.winner:
-            print("Game is already over, won by player {}".format(self.winner))
+            # print("Game is already over, won by player {}".format(self.winner))
             return False
         if not self.__valid_square(square):
-            print("{} is out of bounds for this board (size={}).".format(square, self.size))
+            # print("{} is out of bounds for this board (size={}).".format(square, self.size))
             return False
         if not self.__valid_player(player):
-            print("{} is not a valid player (must be 1 or -1)".format(player))
+            # print("{} is not a valid player (must be 1 or -1)".format(player))
             return False
         if self.board[square]:
-            print("{} has already been played on this board.".format(square, self.board))
+            # print("{} has already been played on this board.".format(square, self.board))
             return False
 
         self.board[square] = player
