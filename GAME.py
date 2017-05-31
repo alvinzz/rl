@@ -1,7 +1,22 @@
 import abc
 
 class GAME(metaclass=abc.ABCMeta):
-    # plays the game. takes a strategy as argument, returns the final score
     @abc.abstractmethod
-    def play(self):
+    def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    def move(self, action):
+        pass
+
+    @abc.abstractmethod
+    def ended(self):
+        pass
+
+    @abc.abstractmethod
+    def get_state(self):
+        pass
+
+    @abc.abstractmethod
+    def get_winner(self):
         pass
