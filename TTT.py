@@ -4,48 +4,48 @@ from GAME import GAME
 import utils
 
 class Board:
-    def __init__(self, size=3):
+    def __init__(self, size=3, player1=-1, player2=1):
         self.size = size
-        self.board = np.zeros((size, size), dtype=int)
+        self.board = np.zeros((size, size), dtype=np.object_)
         self.turn_num = 0
-        self.current_player = -1
+        self.player1 = player1
+        self.player2 = player2
+        self.current_player = player1
         self.winner = None
 
     def __valid_square(self, square):
         return square[0] >= 0 and square[0] < self.size and square[1] >=0 and square[1] < self.size
 
     def __valid_player(self, player):
-        return player == 1 or player == -1
+        return player == self.player1 or player == self.player2
 
-    def mark(self, square, player):
+    def __other_player(self, player):
+        if not self.__valid_player(player):
+            raise ValueError("Player is not in game.")
+        if player == self.player1:
+            return self.player2
+        return self.player1
+
+    def mark(self, square):
         # if self.winner is not None:
         #     # print("Game is already over, won by player {}".format(self.winner))
-        #     self.winner = -player
-        #     return
+        #     return self.winner
         # if not self.__valid_square(square):
         #     # print("{} is out of bounds for this board (size={}).".format(square, self.size))
-        #     self.winner = -player
-        #     return
-        # if not self.__valid_player(player):
-        #     # print("{} is not a valid player (must be 1 or -1)".format(player))
-        #     self.winner = -player
+        #     self.winner = self.__other_player(player)
         #     return
         if self.board[square]:
             # print("{} has already been played on this board.".format(square, self.board))
-            self.winner = -player
+            self.winner = self.__other_player(self.current_player)
             return
 
-        self.board[square] = player
-        self.current_player = -self.current_player
+        self.board[square] = self.current_player
         self.turn_num += 1
+        self.current_player = self.__other_player(self.current_player)
 
         self.winner = self.__check_winner()
 
     def __check_winner(self):
-        # Check draw
-        if self.turn_num == 9:
-            return 0
-
         # Check rows
         for row in range(self.size):
             first = self.board[row][0]
@@ -66,12 +66,18 @@ class Board:
         if first and np.all(self.board[np.arange(self.size), self.size - 1 - np.arange(self.size)] == first):
             return first
 
+        # Check draw
+        if self.turn_num == 9:
+            return 0
+
         return None
 
 class TTT(GAME):
-    def __init__(self, size=3):
+    def __init__(self, size=3, player1=-1, player2=1):
         self.size = size
-        self.board = Board(size)
+        self.board = Board(size, player1, player2)
+        self.player1 = player1
+        self.player2 = player2
 
     def play(self, strategy1, strategy2=None):
         if strategy2 is None:
@@ -80,13 +86,13 @@ class TTT(GAME):
         while not self.ended():
             # print(self.board.board.T)
             player = self.board.current_player
-            if player == -1:
+            if player == self.player1:
                 action = strategy1(self.get_state())
             else:
                 action = strategy2(self.get_state())
             self.move(action)
 
-        # print(self.board.board)
+        # print(self.board.board.T)
         # if self.board.winner != 0:
         #     print("Winner: {}".format(self.get_winner()))
         # else:
@@ -99,8 +105,7 @@ class TTT(GAME):
 
     def move(self, action):
         square = (action // self.size, action % self.size)
-        player = self.board.current_player
-        self.board.mark(square, player)
+        self.board.mark(square)
         # print(self.board.board.T)
 
     def get_winner(self):
