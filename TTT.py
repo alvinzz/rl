@@ -136,14 +136,7 @@ def TTT_random(state):
 if __name__ == "__main__":
     import pickle
     strategies = []
-    model = pickle.load(open("TTT_20_batch_100_keep_past_14000.p", "rb"))
-
-    def nn_strategy(state):
-        # h0 = utils.relu(np.matmul(process_state(state), model["W0"]) + model["b0"])
-        # h1 = utils.relu(np.matmul(h0, model["W1"]) + model["b1"])
-        # return np.argmax(np.matmul(h1, model["W2"]) + model["b2"])
-        h0 = utils.relu(np.matmul(process_state(state), model["W0"]) + model["b0"])
-        return np.argmax(np.matmul(h0, model["W1"]) + model["b1"])
+    model = pickle.load(open("TTT_test_0.p", "rb"))
 
     def process_state(state):
         ones = np.where(state == 1)[0]
@@ -153,8 +146,15 @@ if __name__ == "__main__":
         result[negs + 9] = 1
         return result
 
+    def create_nn_strategy(model):
+        def nn_strategy(state):
+            return utils.run_model(model, process_state(state), stochastic=False)
+        return nn_strategy
+
+    nn_strategy = create_nn_strategy(model)
+
     results = []
-    for _ in range(500):
+    for _ in range(5000):
         # NN plays -1 always
         test = TTT(3, -1, 1)
         results.append(test.play(strategy1=nn_strategy, strategy2=TTT_random))

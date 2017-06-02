@@ -8,8 +8,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from TTT import TTT, TTT_random
 
-# notes: convergence at around 50000 on batch_100
-# todo: play against self
+# notes: with exploration=0, hidden_dims=[50], batch=100, convergence at around 50000 epochs w/ 90% winrate vs random
+# TODO: get play against self to work with comparable performance!
+# TODO: get deeper/larger networks to work
+# TODO: TRPO
 
 class TTT_RL:
     def __init__(self):
@@ -17,18 +19,19 @@ class TTT_RL:
         self.state_dim = 18
         self.num_actions = 9
 
-        self.hidden_dims = [50]
+        self.hidden_dims = [50, 50]
         self.batch_size = 100
         self.epochs = 1000000
         self.learning_rate = 1e-4
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.discount_factor = 0.9 # gamma
-        self.exploration_param = 0 #0.5 # epsilon
-        self.exploration_decay = 0 #self.exploration_param / (self.epochs * 0.8)
+        # we do sampling already, so exploration not necessary?
+        self.exploration_param = 0 # 0.5 # epsilon
+        self.exploration_decay = 0 # self.exploration_param / (self.epochs * 0.8)
         self.l2_weight = 0.001
-        # self.dropout_prob = 0.0
-        self.past_strategies = [self.generate_ith_nn_strat(0)]
+        # self.dropout_prob = 0.0 # not necessary, seeing as overfitting is not an issue for TTT
         self.past_models = [None]
+        self.past_strategies = [self.generate_ith_nn_strat(0)]
 
         self.session = tf.Session()
         self.trainable = {}
@@ -55,36 +58,17 @@ class TTT_RL:
         self.probs = tf.nn.softmax(self.logprobs)
 
         # store rollout results
+        # check if tf can one-hot internally
+        # and convert to float
         self.rollout_actions = tf.placeholder(tf.int32, shape=[None], name="rollout_actions")
         self.discounted_rewards = tf.placeholder(tf.float32, shape=[None], name="discounted_rewards")
+        self.one_hot_rollout_actions = tf.one_hot(self.rollout_actions, depth=self.num_actions, dtype=tf.float32)
 
         # get losses, apply policy gradient
         self.l2_loss = tf.reduce_sum([tf.reduce_sum(tf.square(self.trainable["W{}".format(i)])) for i in np.arange(len(self.hidden_dims) + 1)])
-        self.policy_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logprobs, labels=self.rollout_actions))
-        self.loss = self.policy_loss + self.l2_weight * self.l2_loss
-        grads = self.optimizer.compute_gradients(self.loss)
-        # put gradients in fixed ordering: W0, b0, W1, b1, ...
-        self.grad_dict = {}
-        for k in grads:
-            self.grad_dict[k[1]] = k[0]
-        self.gradients = []
-        for i in range(len(self.hidden_dims) + 1):
-            self.gradients.append(self.grad_dict[self.trainable["W{}".format(i)]])
-            self.gradients.append(self.grad_dict[self.trainable["b{}".format(i)]])
-
-        self.policy_gradients = [tf.placeholder(tf.float32, shape=[self.state_dim, self.hidden_dims[0]]), tf.placeholder(tf.float32, shape=(self.hidden_dims[0]))]
-        for i in np.arange(1, len(self.hidden_dims)):
-            self.policy_gradients.append(tf.placeholder(tf.float32, shape=[self.hidden_dims[i - 1], self.hidden_dims[i]]))
-            self.policy_gradients.append(tf.placeholder(tf.float32, shape=[self.hidden_dims[i]]))
-        self.policy_gradients.append(tf.placeholder(tf.float32, shape=[self.hidden_dims[-1], self.num_actions]))
-        self.policy_gradients.append(tf.placeholder(tf.float32, shape=[self.num_actions]))
-
-        self.policy_grad_tuples = []
-        for i in range(len(self.hidden_dims) + 1):
-            self.policy_grad_tuples.append((self.policy_gradients[2 * i], self.trainable["W{}".format(i)]))
-            self.policy_grad_tuples.append((self.policy_gradients[2 * i + 1], self.trainable["b{}".format(i)]))
-
-        self.train_op = self.optimizer.apply_gradients(self.policy_grad_tuples)
+        self.policy_losses = -tf.reduce_sum(self.probs * self.one_hot_rollout_actions, reduction_indices=1) * self.discounted_rewards
+        self.loss = self.l2_weight * self.l2_loss + self.policy_losses
+        self.train_op = self.optimizer.minimize(self.loss)
 
     def sample_action(self, state):
         if np.random.rand() <= self.exploration_param:
@@ -101,19 +85,24 @@ class TTT_RL:
     def train(self):
         self.session.run(tf.global_variables_initializer())
 
-        self.epoch_score = -10000
+        self.save_freq = 1000
+        self.eval_freq = 100
+        self.add_to_past = 0 # needs to be multiple of eval_freq
+
+        self.epoch_score = -self.eval_freq * self.batch_size
         print("Starting training.")
         for epoch in range(self.epochs):
-            if epoch % 1000 == 0 and self.epoch_score > 0:
+            if self.add_to_past and epoch % self.add_to_past == 0 and self.epoch_score > 0:
                 print("Adding this iteration to past models.")
                 model = self.session.run(self.trainable)
                 self.past_models.append(model)
-            if epoch % 1000 == 0:
+                self.past_strategies.append(self.generate_ith_nn_strat(len(self.past_models) - 1))
+            if epoch % self.save_freq == 0:
                 print("Saving model.")
                 model = self.session.run(self.trainable)
-                pickle.dump(model, open('TTT_50_batch_100_keep_past_{}.p'.format(epoch), 'wb'))
-            if epoch % 100 == 0:
-                print("Epoch {}, win % against past iterations={}%".format(epoch, round(self.epoch_score / 200 + 50, 1)))
+                pickle.dump(model, open('TTT_test_{}.p'.format(epoch), 'wb'))
+            if epoch % self.eval_freq == 0:
+                print("Epoch {}, win % against past iterations={}%".format(epoch, round(100 * (self.epoch_score / 2 / self.eval_freq / self.batch_size + 0.5), 1)))
                 self.epoch_score = 0
 
             inputs = []
@@ -123,7 +112,7 @@ class TTT_RL:
             for batch_num in range(self.batch_size):
                 batch_rewards = []
 
-                # change this to sample from past_strategies
+                # sample from past_strategies
                 other_strategy = np.random.choice(self.past_strategies)
 
                 turn_num = 0
@@ -174,26 +163,16 @@ class TTT_RL:
             if np.std(discounted_rewards):
                 discounted_rewards /= np.std(discounted_rewards)
 
-            # accumulate gradients for batch and weight by reward
-            policy_gradients = [0] * 2 * (len(self.hidden_dims) + 1)
-
-            for i in range(len(inputs)):
-                grads = self.session.run(self.gradients, feed_dict={
-                    self.inputs: np.array([inputs[i]], dtype=np.float32),
-                    self.rollout_actions: np.array([rollout_actions[i]], dtype=np.int32),
-                    self.discounted_rewards: np.array([discounted_rewards[i]], dtype=np.float32)
-                })
-                for j, grad in enumerate(grads):
-                    policy_gradients[j] += discounted_rewards[i] * grad
-
             _ = self.session.run(self.train_op, feed_dict={
-                k: v for (k, v) in zip(self.policy_gradients, policy_gradients)
+                self.inputs: np.array(inputs, dtype=np.float32),
+                self.rollout_actions: np.array(rollout_actions, dtype=np.int32),
+                self.discounted_rewards: np.array(discounted_rewards, dtype=np.float32)
             })
 
             # update exploration parameter
             self.exploration_param = max(self.exploration_param - self.exploration_decay, 0)
 
-        print("Finished training, final win % against past iterations is {}%".format(epoch, round((self.epoch_score / 2 + 499.5) / 10, 1)))
+        print("Finished training, final win % against past iterations is {}%".format(epoch, round(100 * (self.epoch_score / 2 / self.eval_freq / self.batch_size + 0.5), 1)))
 
     def process_state(self, state):
         ones = np.where(state == 1)[0]
@@ -207,13 +186,9 @@ class TTT_RL:
         def ith_nn_strat(state):
             model = self.past_models[i]
             if model is None:
-                # print("Using random.")
                 return TTT_random(state)
             else:
-                # print("Using saved.")
-                h = utils.relu(np.matmul(self.process_state(state), model["W0"]) + model["b0"])
-                probs = utils.sigmoid(np.matmul(h, model["W1"]) + model["b1"])
-                return np.random.choice(self.num_actions, p=probs)
+                return utils.run_model(model, self.process_state(state))
         return ith_nn_strat
 
 if __name__ == "__main__":
