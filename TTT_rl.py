@@ -57,9 +57,7 @@ class TTT_RL:
         self.logprobs = tf.matmul(self.outputs["h{}".format(i - 1)], self.trainable["W{}".format(i)]) + self.trainable["b{}".format(i)]
         self.probs = tf.nn.softmax(self.logprobs)
 
-        # store rollout results
-        # check if tf can one-hot internally
-        # and convert to float
+        # get rollout actions and rewards
         self.rollout_actions = tf.placeholder(tf.int32, shape=[None], name="rollout_actions")
         self.discounted_rewards = tf.placeholder(tf.float32, shape=[None], name="discounted_rewards")
         self.one_hot_rollout_actions = tf.one_hot(self.rollout_actions, depth=self.num_actions, dtype=tf.float32)
