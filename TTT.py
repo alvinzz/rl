@@ -116,9 +116,10 @@ class TTT(GAME):
 
 def TTT_input(state):
     result = None
+    print(np.reshape(state, (3, 3)).T)
     while not result:
         try:
-            square_str = input("Player {}, pick a square: ".format(board.current_player))
+            square_str = input("Pick a square: ")
             square_str_list = square_str.split(",")
             if len(square_str_list) != 2:
                 raise ValueError("Could not parse (x, y) coordinates from input.")
@@ -133,8 +134,30 @@ def TTT_random(state):
     return np.random.choice(valid_actions)
 
 if __name__ == "__main__":
+    import pickle
+    strategies = []
+    model = pickle.load(open("TTT_20_batch_100_keep_past_14000.p", "rb"))
+
+    def nn_strategy(state):
+        # h0 = utils.relu(np.matmul(process_state(state), model["W0"]) + model["b0"])
+        # h1 = utils.relu(np.matmul(h0, model["W1"]) + model["b1"])
+        # return np.argmax(np.matmul(h1, model["W2"]) + model["b2"])
+        h0 = utils.relu(np.matmul(process_state(state), model["W0"]) + model["b0"])
+        return np.argmax(np.matmul(h0, model["W1"]) + model["b1"])
+
+    def process_state(state):
+        ones = np.where(state == 1)[0]
+        negs = np.where(state == -1)[0]
+        result = np.zeros(18)
+        result[ones] = 1
+        result[negs + 9] = 1
+        return result
+
     results = []
-    for _ in range(10000):
-        test = TTT()
-        results.append(test.play(strategy1=TTT_random))
+    for _ in range(500):
+        # NN plays -1 always
+        test = TTT(3, -1, 1)
+        results.append(test.play(strategy1=nn_strategy, strategy2=TTT_random))
+        test = TTT(3, 1, -1)
+        results.append(test.play(strategy1=TTT_random, strategy2=nn_strategy))
     print(sum(results))

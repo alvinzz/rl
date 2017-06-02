@@ -1,11 +1,15 @@
 import tensorflow as tf
 import numpy as np
 import pickle
+import utils
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from TTT import TTT, TTT_random
+
+# notes: convergence at around 50000 on batch_100
+# todo: play against self
 
 class TTT_RL:
     def __init__(self):
@@ -14,16 +18,17 @@ class TTT_RL:
         self.num_actions = 9
 
         self.hidden_dims = [50]
-        self.batch_size = 1
+        self.batch_size = 100
         self.epochs = 1000000
         self.learning_rate = 1e-4
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.discount_factor = 0.9 # gamma
-        self.exploration_param = 0 # 0.4 # epsilon
-        self.exploration_decay = 0 # self.exploration_param / self.epochs
+        self.exploration_param = 0 #0.5 # epsilon
+        self.exploration_decay = 0 #self.exploration_param / (self.epochs * 0.8)
         self.l2_weight = 0.001
         # self.dropout_prob = 0.0
-        # self.past_strategies = []
+        self.past_strategies = [self.generate_ith_nn_strat(0)]
+        self.past_models = [None]
 
         self.session = tf.Session()
         self.trainable = {}
@@ -86,7 +91,7 @@ class TTT_RL:
             sampled = np.random.randint(self.num_actions)
         else:
             probs = self.session.run(self.probs, feed_dict={self.inputs: np.expand_dims(self.process_state(state), axis=0)})[0]
-            sampled = np.random.choice(self.num_actions, 1, p=probs)[0]
+            sampled = np.random.choice(self.num_actions, p=probs)
         return sampled
 
     def strategy(self, state):
@@ -96,16 +101,21 @@ class TTT_RL:
     def train(self):
         self.session.run(tf.global_variables_initializer())
 
-        self.epoch_score = -1000
+        self.epoch_score = -10000
         print("Starting training.")
         for epoch in range(self.epochs):
-            if epoch % 100000 == 0 or self.epoch_score / 2 + 500 >= 900:
+            if epoch % 1000 == 0 and self.epoch_score > 0:
+                print("Adding this iteration to past models.")
+                model = self.session.run(self.trainable)
+                self.past_models.append(model)
+            if epoch % 1000 == 0:
                 print("Saving model.")
                 model = self.session.run(self.trainable)
-                pickle.dump(model, open('TTT_{}.p'.format(epoch), 'wb'))
-            if epoch % 1000 == 0:
-                print("Epoch {}, win % against random={}%".format(epoch, round((self.epoch_score / 2 + 500) / 10, 1)))
+                pickle.dump(model, open('TTT_50_batch_100_keep_past_{}.p'.format(epoch), 'wb'))
+            if epoch % 100 == 0:
+                print("Epoch {}, win % against past iterations={}%".format(epoch, round(self.epoch_score / 200 + 50, 1)))
                 self.epoch_score = 0
+
             inputs = []
             rollout_actions = []
             discounted_rewards = []
@@ -114,7 +124,7 @@ class TTT_RL:
                 batch_rewards = []
 
                 # change this to sample from past_strategies
-                other_strategy = TTT_random # np.random.choice([self.strategy, TTT_random])
+                other_strategy = np.random.choice(self.past_strategies)
 
                 turn_num = 0
 
@@ -141,6 +151,7 @@ class TTT_RL:
                         rollout_actions.append(action)
                         game.move(action)
                     else:
+                        state = -state
                         other_strategy_action = other_strategy(state)
                         game.move(other_strategy_action)
 
@@ -163,6 +174,7 @@ class TTT_RL:
             if np.std(discounted_rewards):
                 discounted_rewards /= np.std(discounted_rewards)
 
+            # accumulate gradients for batch and weight by reward
             policy_gradients = [0] * 2 * (len(self.hidden_dims) + 1)
 
             for i in range(len(inputs)):
@@ -178,9 +190,10 @@ class TTT_RL:
                 k: v for (k, v) in zip(self.policy_gradients, policy_gradients)
             })
 
+            # update exploration parameter
             self.exploration_param = max(self.exploration_param - self.exploration_decay, 0)
 
-        print("Finished training, win % against random is {}%".format(round(self.test() / 10, 1)))
+        print("Finished training, final win % against past iterations is {}%".format(epoch, round((self.epoch_score / 2 + 499.5) / 10, 1)))
 
     def process_state(self, state):
         ones = np.where(state == 1)[0]
@@ -189,6 +202,19 @@ class TTT_RL:
         result[ones] = 1
         result[negs + 9] = 1
         return result
+
+    def generate_ith_nn_strat(self, i):
+        def ith_nn_strat(state):
+            model = self.past_models[i]
+            if model is None:
+                # print("Using random.")
+                return TTT_random(state)
+            else:
+                # print("Using saved.")
+                h = utils.relu(np.matmul(self.process_state(state), model["W0"]) + model["b0"])
+                probs = utils.sigmoid(np.matmul(h, model["W1"]) + model["b1"])
+                return np.random.choice(self.num_actions, p=probs)
+        return ith_nn_strat
 
 if __name__ == "__main__":
     test = TTT_RL()
