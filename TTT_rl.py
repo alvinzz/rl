@@ -98,7 +98,7 @@ class TTT_RL:
             if epoch % self.save_freq == 0:
                 print("Saving model.")
                 model = self.session.run(self.trainable)
-                pickle.dump(model, open('TTT_test_{}.p'.format(epoch), 'wb'))
+                pickle.dump(model, open('TTT_50_50_batch_100_{}.p'.format(epoch), 'wb'))
             if epoch % self.eval_freq == 0:
                 print("Epoch {}, win % against past iterations={}%".format(epoch, round(100 * (self.epoch_score / 2 / self.eval_freq / self.batch_size + 0.5), 1)))
                 self.epoch_score = 0
