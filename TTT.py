@@ -80,7 +80,7 @@ class TTT(GAME):
         self.player1 = player1
         self.player2 = player2
 
-    def play(self, strategy1=TTT_input, strategy2=None):
+    def play(self, strategy1=TTT.TTT_input, strategy2=None):
         if strategy2 is None:
             strategy2 = strategy1
 
@@ -106,24 +106,24 @@ class TTT(GAME):
     def ended(self):
         return self.board.winner is not None
 
-def TTT_input(state):
-    result = None
-    while not result:
-        try:
-            square_str = input("Pick a square: ")
-            square_str_list = square_str.split(",")
-            if len(square_str_list) != 2:
-                raise ValueError("Could not parse (x, y) coordinates from input.")
-            result = [utils.input_to_int(entry) for entry in square_str_list]
-        except ValueError as err:
-            print(err)
-            continue
-    return 3 * result[1] + result[0]
+    def TTT_input(state):
+        result = None
+        while not result:
+            try:
+                square_str = input("Pick a square: ")
+                square_str_list = square_str.split(",")
+                if len(square_str_list) != 2:
+                    raise ValueError("Could not parse (x, y) coordinates from input.")
+                result = [utils.input_to_int(entry) for entry in square_str_list]
+            except ValueError as err:
+                print(err)
+                continue
+        return 3 * result[1] + result[0]
 
-def TTT_random(state):
-    size = int(np.sqrt(len(state) / 2))
-    valid_actions = np.where(state[size] == 0)[0]
-    return np.random.choice(valid_actions)
+    def TTT_random(state):
+        size = int(np.sqrt(len(state) / 2))
+        valid_actions = np.where(state[size] == 0)[0]
+        return np.random.choice(valid_actions)
 
 if __name__ == "__main__":
     test = TTT(3)
