@@ -25,9 +25,6 @@ class TTT_RL:
         self.learning_rate = 1e-4
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.discount_factor = 0.9 # gamma
-        # we do sampling already, so exploration not necessary?
-        self.exploration_param = 0 # 0.5 # epsilon
-        self.exploration_decay = 0 # self.exploration_param / (self.epochs * 0.8)
         self.l2_weight = 0.001
         # self.dropout_prob = 0.0 # not necessary, seeing as overfitting is not an issue for TTT
         self.past_models = [None]
