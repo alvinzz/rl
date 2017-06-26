@@ -4,109 +4,101 @@ from GAME import GAME
 import utils
 
 class Board:
-    def __init__(self, size=3, player1=-1, player2=1):
+    def __init__(self, size=3):
+        assert player1 != player2, "Players must be different."
+        assert type(size) is int, "Size must be an integer."
         self.size = size
-        self.board = np.zeros((size, size), dtype=np.object_)
+        self.state = np.zeros(2 * self.size * self.size, dtype=np.uint8)
         self.turn_num = 0
-        self.player1 = player1
-        self.player2 = player2
-        self.current_player = player1
+        self.current_player = 0
         self.winner = None
 
-    def __valid_square(self, square):
-        return square[0] >= 0 and square[0] < self.size and square[1] >=0 and square[1] < self.size
-
-    def __valid_player(self, player):
-        return player == self.player1 or player == self.player2
-
-    def __other_player(self, player):
-        if not self.__valid_player(player):
-            raise ValueError("Player is not in game.")
-        if player == self.player1:
-            return self.player2
-        return self.player1
-
     def mark(self, square):
-        # if self.winner is not None:
-        #     # print("Game is already over, won by player {}".format(self.winner))
-        #     return self.winner
-        # if not self.__valid_square(square):
-        #     # print("{} is out of bounds for this board (size={}).".format(square, self.size))
-        #     self.winner = self.__other_player(player)
-        #     return
-        if self.board[square]:
-            # print("{} has already been played on this board.".format(square, self.board))
-            self.winner = self.__other_player(self.current_player)
+        index = self.size * square[1] + square[0]
+
+        if self.state[index] or self.state[index + self.size * self.size]:
+            self.winner = 1 - self.current_player
             return
 
-        self.board[square] = self.current_player
+        if self.current_player == 0:
+            self.state[index] = 1
+        else:
+            self.state[index + self.size * self.size] = 1
+
         self.turn_num += 1
-        self.current_player = self.__other_player(self.current_player)
+        self.current_player = 1 - self.current_player
 
         self.winner = self.__check_winner()
 
     def __check_winner(self):
-        # Check rows
-        for row in range(self.size):
-            first = self.board[row][0]
-            if first and np.all(self.board[row] == first):
-                return first
+        # Check rows and cols
+        for i in range(self.size):
+            row = self.state[np.arange(self.size) + self.size * i]
+            col = self.state[np.arange(self.size) * self.size + i]
+            if np.all(row) or np.all(col):
+                return 0
 
-        # Check columns
-        for col in range(self.size):
-            first = self.board[:, col][0]
-            if first and np.all(self.board[:, col] == first):
-                return first
+        for i in range(self.size):
+            row = self.state[np.arange(self.size) + self.size * i + self.size * self.size]
+            col = self.state[np.arange(self.size) * self.size + i + self.size * self.size]
+            if np.all(row) or np.all(col):
+                return 1
 
         # Check diagonals
-        first = self.board[0][0]
-        if first and np.all(self.board[np.arange(self.size), np.arange(self.size)] == first):
-            return first
-        first = self.board[0][-1]
-        if first and np.all(self.board[np.arange(self.size), self.size - 1 - np.arange(self.size)] == first):
-            return first
+        if np.all(self.state[np.arange(self.size) * (self.size + 1)]):
+            return 0
+        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size]):
+            return 0
+        if np.all(self.state[np.arange(self.size) * (self.size + 1) + self.size * self.size]):
+            return 1
+        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size + self.size * self.size]):
+            return 1
 
-        # Check draw
+        # Check draw: nobody won (from above), and the 9th move has been made
         if self.turn_num == 9:
             return 0
 
+        # Game is still in progress
         return None
 
+    def display(self):
+        player1_rows = [i // self.size for i in np.where(self.state[:self.size * self.size])][0]
+        player1_cols = [i % self.size for i in np.where(self.state[:self.size * self.size])][0]
+        player2_rows = [i // self.size for i in np.where(self.state[self.size * self.size:])][0]
+        player2_cols = [i % self.size for i in np.where(self.state[self.size * self.size:])][0]
+        res = np.full((self.size, self.size), '_')
+        for row, col in zip(player1_rows, player1_cols):
+            res[row, col] = 'X'
+        for row, col in zip(player2_rows, player2_cols):
+            res[row, col] = 'O'
+        print(res)
+
 class TTT(GAME):
-    def __init__(self, size=3, player1=-1, player2=1):
+    def __init__(self, size=3):
         self.size = size
         self.board = Board(size, player1, player2)
         self.player1 = player1
         self.player2 = player2
 
-    def play(self, strategy1, strategy2=None):
+    def play(self, strategy1=TTT_input, strategy2=None):
         if strategy2 is None:
             strategy2 = strategy1
 
         while not self.ended():
-            # print(self.board.board.T)
+            self.board.display()
             player = self.board.current_player
             if player == self.player1:
-                action = strategy1(self.get_state())
+                action = strategy1(self.board.state)
             else:
-                action = strategy2(self.get_state())
+                action = strategy2(self.board.state[:self.size * self.size] + self.board.state[self.size * self.size:])
             self.move(action)
 
-        # print(self.board.board.T)
-        # if self.board.winner != 0:
-        #     print("Winner: {}".format(self.get_winner()))
-        # else:
-        #     print("Draw.")
-
+        self.board.display()
         return self.get_winner()
-
-    def get_state(self):
-        return self.board.board.ravel()
 
     def move(self, action):
         square = (action // self.size, action % self.size)
         self.board.mark(square)
-        # print(self.board.board.T)
 
     def get_winner(self):
         return self.board.winner
@@ -116,7 +108,6 @@ class TTT(GAME):
 
 def TTT_input(state):
     result = None
-    print(np.reshape(state, (3, 3)).T)
     while not result:
         try:
             square_str = input("Pick a square: ")
@@ -127,37 +118,40 @@ def TTT_input(state):
         except ValueError as err:
             print(err)
             continue
-    return 3 * result[0] + result[1]
+    return 3 * result[1] + result[0]
 
 def TTT_random(state):
-    valid_actions = np.where(state == 0)[0]
+    size = int(np.sqrt(len(state) / 2))
+    valid_actions = np.where(state[size] == 0)[0]
     return np.random.choice(valid_actions)
 
 if __name__ == "__main__":
-    import pickle
-    strategies = []
-    model = pickle.load(open("TTT_test_0.p", "rb"))
-
-    def process_state(state):
-        ones = np.where(state == 1)[0]
-        negs = np.where(state == -1)[0]
-        result = np.zeros(18)
-        result[ones] = 1
-        result[negs + 9] = 1
-        return result
-
-    def create_nn_strategy(model):
-        def nn_strategy(state):
-            return utils.run_model(model, process_state(state), stochastic=False)
-        return nn_strategy
-
-    nn_strategy = create_nn_strategy(model)
-
-    results = []
-    for _ in range(5000):
-        # NN plays -1 always
-        test = TTT(3, -1, 1)
-        results.append(test.play(strategy1=nn_strategy, strategy2=TTT_random))
-        test = TTT(3, 1, -1)
-        results.append(test.play(strategy1=TTT_random, strategy2=nn_strategy))
-    print(sum(results))
+    test = TTT(3)
+    test.play()
+    # import pickle
+    # strategies = []
+    # model = pickle.load(open("TTT_test_0.p", "rb"))
+    #
+    # def process_state(state):
+    #     ones = np.where(state == 1)[0]
+    #     negs = np.where(state == -1)[0]
+    #     result = np.zeros(18)
+    #     result[ones] = 1
+    #     result[negs + 9] = 1
+    #     return result
+    #
+    # def create_nn_strategy(model):
+    #     def nn_strategy(state):
+    #         return utils.run_model(model, process_state(state), stochastic=False)
+    #     return nn_strategy
+    #
+    # nn_strategy = create_nn_strategy(model)
+    #
+    # results = []
+    # for _ in range(5000):
+    #     # NN plays -1 always
+    #     test = TTT(3, -1, 1)
+    #     results.append(test.play(strategy1=nn_strategy, strategy2=TTT_random))
+    #     test = TTT(3, 1, -1)
+    #     results.append(test.play(strategy1=TTT_random, strategy2=nn_strategy))
+    # print(sum(results))
