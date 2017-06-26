@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cv2
 import pickle
@@ -21,7 +23,7 @@ def draw_o(ax, center):
     circ = plt.Circle((center_x, center_y), radius, color=str(np.random.uniform(0, 0.5)), fill=False, linewidth=np.random.uniform(1, 3))
     ax.add_artist(circ)
 
-def create_training_set(items=1000):
+def create_training_set(items=10000):
     for i in range(items):
         fig = plt.figure(figsize=(512 / 96, 512 / 96), dpi=96)
         ax = fig.add_subplot(111)
@@ -74,8 +76,8 @@ def create_training_set(items=1000):
         M = cv2.getPerspectiveTransform(pts1, pts2)
         im = cv2.warpPerspective(im, M, (512, 512), borderValue=background)
 
-        cv2.imwrite('images/{}.png'.format(i), im)
-        pickle.dump(state, open("labels/{}.p".format(i), "wb"))
+        cv2.imwrite('/data/images/{}.png'.format(i), im)
+        pickle.dump(state, open("/data/labels/{}.p".format(i), "wb"))
 
 if __name__ == "__main__":
     create_training_set()
