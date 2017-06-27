@@ -23,4 +23,6 @@ def run_model(model, inputs, stochastic=True):
         actions = len(probs)
         return np.random.choice(np.arange(len(probs)), p=probs)
     else:
+        print(inputs)
+        print(np.argmax(probs))
         return np.argmax(probs)

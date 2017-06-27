@@ -5,7 +5,6 @@ import utils
 
 class Board:
     def __init__(self, size=3):
-        assert player1 != player2, "Players must be different."
         assert type(size) is int, "Size must be an integer."
         self.size = size
         self.state = np.zeros(2 * self.size * self.size, dtype=np.uint8)
@@ -47,16 +46,16 @@ class Board:
         # Check diagonals
         if np.all(self.state[np.arange(self.size) * (self.size + 1)]):
             return 0
-        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size]):
+        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size - 1]):
             return 0
         if np.all(self.state[np.arange(self.size) * (self.size + 1) + self.size * self.size]):
             return 1
-        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size + self.size * self.size]):
+        if np.all(self.state[np.arange(self.size) * (self.size - 1) + self.size - 1 + self.size * self.size]):
             return 1
 
         # Check draw: nobody won (from above), and the 9th move has been made
         if self.turn_num == 9:
-            return 0
+            return 0.5
 
         # Game is still in progress
         return None
@@ -88,70 +87,66 @@ def TTT_input(state):
     return 3 * result[1] + result[0]
 
 def TTT_random(state):
-    size = int(np.sqrt(len(state) / 2))
-    valid_actions = np.where(state[size] == 0)[0]
+    num_actions = int(len(state) / 2)
+    valid_actions = np.arange(num_actions)
+    valid_actions = list(filter(lambda square: state[square] == 0 and state[square + num_actions] == 0, valid_actions))
     return np.random.choice(valid_actions)
 
 class TTT(GAME):
-    def __init__(self, size=3):
+    def __init__(self, size=3, display=False):
         self.size = size
-        self.board = Board(size, player1, player2)
-        self.player1 = player1
-        self.player2 = player2
+        self.board = Board(size)
+        self.display = display
 
-    def play(self, strategy1=TTT_input, strategy2=None):
+    def play(self, strategy1=TTT_random, strategy2=TTT_input):
         if strategy2 is None:
             strategy2 = strategy1
 
         while not self.ended():
-            self.board.display()
+            if self.display:
+                self.board.display()
             player = self.board.current_player
-            if player == self.player1:
+            if player == 0:
                 action = strategy1(self.board.state)
             else:
-                action = strategy2(self.board.state[:self.size * self.size] + self.board.state[self.size * self.size:])
+                action = strategy2(np.hstack((self.board.state[self.size * self.size:], self.board.state[:self.size * self.size])))
             self.move(action)
 
-        self.board.display()
+        if self.display:
+            self.board.display()
         return self.get_winner()
 
     def move(self, action):
-        square = (action // self.size, action % self.size)
+        square = (action % self.size, action // self.size)
         self.board.mark(square)
 
     def get_winner(self):
         return self.board.winner
 
+    def get_state(self):
+        return self.board.state
+
     def ended(self):
         return self.board.winner is not None
 
 if __name__ == "__main__":
-    test = TTT(3)
-    test.play()
-    # import pickle
-    # strategies = []
-    # model = pickle.load(open("TTT_test_0.p", "rb"))
-    #
-    # def process_state(state):
-    #     ones = np.where(state == 1)[0]
-    #     negs = np.where(state == -1)[0]
-    #     result = np.zeros(18)
-    #     result[ones] = 1
-    #     result[negs + 9] = 1
-    #     return result
-    #
-    # def create_nn_strategy(model):
-    #     def nn_strategy(state):
-    #         return utils.run_model(model, process_state(state), stochastic=False)
-    #     return nn_strategy
-    #
-    # nn_strategy = create_nn_strategy(model)
-    #
-    # results = []
-    # for _ in range(5000):
-    #     # NN plays -1 always
-    #     test = TTT(3, -1, 1)
-    #     results.append(test.play(strategy1=nn_strategy, strategy2=TTT_random))
-    #     test = TTT(3, 1, -1)
-    #     results.append(test.play(strategy1=TTT_random, strategy2=nn_strategy))
-    # print(sum(results))
+    import pickle
+    model = pickle.load(open("/data/TTT_50_50_batch_100/TTT_50_50_batch_100_290000.p", "rb"))
+    print(model)
+
+    def create_nn_strategy(model):
+        def nn_strategy(state):
+            return utils.run_model(model, state, stochastic=False)
+        return nn_strategy
+    
+    nn_strategy = create_nn_strategy(model)
+    
+    results = []
+    for _ in range(5000):
+        test = TTT(3)
+        result = 1 - test.play(strategy1=nn_strategy, strategy2=TTT_random)
+        results.append(result)
+        test = TTT(3)
+        result = test.play(strategy1=TTT_random, strategy2=nn_strategy)
+        results.append(result)
+    print(sum(results))
