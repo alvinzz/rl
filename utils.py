@@ -23,6 +23,13 @@ def run_model(model, inputs, stochastic=True):
         actions = len(probs)
         return np.random.choice(np.arange(len(probs)), p=probs)
     else:
-        print(inputs)
-        print(np.argmax(probs))
         return np.argmax(probs)
+
+def discount_rewards(game_rewards, discount_factor=0.99):
+    for i in range(len(game_rewards)):
+        for j in range(i + 1, len(game_rewards)):
+            game_rewards[i] += discount_factor ** (j - i) * game_rewards[j]
+    return game_rewards
+
+if __name__ == "__main__":
+    print(discount_rewards([0,0,0,0,0,1]))

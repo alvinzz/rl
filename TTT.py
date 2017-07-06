@@ -65,7 +65,7 @@ class Board:
         player1_cols = [i % self.size for i in np.where(self.state[:self.size * self.size])][0]
         player2_rows = [i // self.size for i in np.where(self.state[self.size * self.size:])][0]
         player2_cols = [i % self.size for i in np.where(self.state[self.size * self.size:])][0]
-        res = np.full((self.size, self.size), '_')
+        res = np.full((self.size, self.size), '_', dtype=np.object_)
         for row, col in zip(player1_rows, player1_cols):
             res[row, col] = 'X'
         for row, col in zip(player2_rows, player2_cols):
@@ -131,22 +131,21 @@ class TTT(GAME):
 
 if __name__ == "__main__":
     import pickle
-    model = pickle.load(open("/data/TTT_50_50_batch_100/TTT_50_50_batch_100_290000.p", "rb"))
-    print(model)
+    model = pickle.load(open("./TTT_batch_100_110000.p", "rb"))
 
     def create_nn_strategy(model):
         def nn_strategy(state):
             return utils.run_model(model, state, stochastic=False)
         return nn_strategy
-    
+
     nn_strategy = create_nn_strategy(model)
-    
+
     results = []
     for _ in range(5000):
-        test = TTT(3)
+        test = TTT(3, display=False)
         result = 1 - test.play(strategy1=nn_strategy, strategy2=TTT_random)
         results.append(result)
-        test = TTT(3)
+        test = TTT(3, display=False)
         result = test.play(strategy1=TTT_random, strategy2=nn_strategy)
         results.append(result)
     print(sum(results))
