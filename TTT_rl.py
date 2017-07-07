@@ -73,7 +73,7 @@ class TTT_RL:
 
         # get losses, apply policy gradient
         self.policy_l2_loss = tf.reduce_sum([tf.reduce_sum(tf.square(self.policy_network["W{}".format(i)])) for i in np.arange(len(self.hidden_dims) + 1)])
-        self.policy_loss = -tf.reduce_sum(tf.log(self.probs) * self.one_hot_rollout_actions, reduction_indices=1) * self.advantage
+        self.policy_loss = -tf.reduce_sum(tf.log(tf.clip_by_value(self.probs, 1e-10, 1)) * self.one_hot_rollout_actions, reduction_indices=1) * self.advantage
         self.value_l2_loss = tf.reduce_sum([tf.reduce_sum(tf.square(self.value_network["W{}".format(i)])) for i in np.arange(len(self.hidden_dims) + 1)])
         self.value_loss = tf.reduce_sum(tf.square(self.discounted_rewards - self.value))
         self.policy_train_op = self.policy_optimizer.minimize(self.l2_weight * self.policy_l2_loss + self.policy_loss)
